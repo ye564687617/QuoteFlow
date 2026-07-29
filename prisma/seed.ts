@@ -4,6 +4,12 @@ import { hash } from "bcryptjs";
 const db = new PrismaClient();
 
 async function main() {
+  const existingUserCount = await db.user.count();
+  if (existingUserCount > 0) {
+    console.log(`Database already initialized with ${existingUserCount} user(s); skipping seed data.`);
+    return;
+  }
+
   const adminEmail = process.env.INITIAL_ADMIN_EMAIL ?? "admin@quoteflow.local";
   const adminPassword = process.env.INITIAL_ADMIN_PASSWORD ?? "ChangeMe123!";
   const salespersonEmail = process.env.INITIAL_SALESPERSON_EMAIL ?? "mandy@quoteflow.local";

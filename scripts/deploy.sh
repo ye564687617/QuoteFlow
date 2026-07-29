@@ -18,7 +18,9 @@ if ! command -v openssl >/dev/null 2>&1; then
 fi
 
 env_file=".env.production"
+first_deploy=0
 if [ ! -f "$env_file" ]; then
+  first_deploy=1
   site_address="${1:-:80}"
   admin_password="$(openssl rand -hex 12)"
   salesperson_password="$(openssl rand -hex 12)"
@@ -111,6 +113,10 @@ case "$site_address" in
 esac
 
 echo "部署完成：${public_url}"
-echo "管理员账号：$(sed -n 's/^INITIAL_ADMIN_EMAIL=//p' "$env_file" | tail -1)"
-echo "管理员初始密码：$(sed -n 's/^INITIAL_ADMIN_PASSWORD=//p' "$env_file" | tail -1)"
-echo "首次登录后请立即修改密码。"
+if [ "$first_deploy" -eq 1 ]; then
+  echo "管理员账号：$(sed -n 's/^INITIAL_ADMIN_EMAIL=//p' "$env_file" | tail -1)"
+  echo "管理员初始密码：$(sed -n 's/^INITIAL_ADMIN_PASSWORD=//p' "$env_file" | tail -1)"
+  echo "首次登录后请立即修改密码。"
+else
+  echo "升级完成，现有账号、密码和业务数据保持不变。"
+fi
