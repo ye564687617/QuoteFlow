@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import dns from "node:dns/promises";
 import { chromium } from "playwright-core";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
@@ -18,6 +19,17 @@ function chromiumPath() {
   return found;
 }
 
+async function renderUrl(revisionId: string) {
+  const url = new URL(env().APP_URL);
+  if (url.protocol === "http:" && url.hostname === "app") {
+    const { address } = await dns.lookup(url.hostname, { family: 4 });
+    url.hostname = address;
+  }
+  url.pathname = `/render/quotes/${encodeURIComponent(revisionId)}`;
+  url.search = new URLSearchParams({ token: env().EXPORT_RENDER_TOKEN }).toString();
+  return url.toString();
+}
+
 export async function processNextExport() {
   const staleBefore = new Date(Date.now() - 10 * 60 * 1000);
   await db.exportJob.updateMany({
@@ -35,9 +47,13 @@ export async function processNextExport() {
 
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   try {
-    browser = await chromium.launch({ executablePath: chromiumPath(), headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+    browser = await chromium.launch({
+      executablePath: chromiumPath(),
+      headless: true,
+      args: ["--no-sandbox", "--disable-dev-shm-usage", "--no-proxy-server", "--disable-features=HttpsUpgrades"],
+    });
     const page = await browser.newPage({ viewport: { width: 1240, height: 900 }, deviceScaleFactor: 2 });
-    const url = `${env().APP_URL}/render/quotes/${pending.revisionId}?token=${encodeURIComponent(env().EXPORT_RENDER_TOKEN)}`;
+    const url = await renderUrl(pending.revisionId);
     await page.goto(url, { waitUntil: "networkidle", timeout: 60_000 });
     await page.waitForSelector("[data-quote-ready='true']", { timeout: 30_000 });
     await page.evaluate(() => document.fonts.ready);
