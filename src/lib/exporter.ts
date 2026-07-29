@@ -30,6 +30,10 @@ async function renderUrl(revisionId: string) {
   return url.toString();
 }
 
+export function sanitizeExportError(message: string) {
+  return message.replace(/([?&]token=)[^&\s"']+/gi, "$1[REDACTED]");
+}
+
 export async function processNextExport() {
   const staleBefore = new Date(Date.now() - 10 * 60 * 1000);
   await db.exportJob.updateMany({
@@ -69,7 +73,7 @@ export async function processNextExport() {
       db.exportJob.update({ where: { id: pending.id }, data: { status: "READY", outputPath, finishedAt: new Date() } }),
     ]);
   } catch (error) {
-    const message = error instanceof Error ? error.message.slice(0, 1000) : "未知导出错误";
+    const message = error instanceof Error ? sanitizeExportError(error.message).slice(0, 1000) : "未知导出错误";
     await db.exportJob.update({ where: { id: pending.id }, data: { status: "FAILED", error: message, finishedAt: new Date() } });
     console.error(`Export ${pending.id} failed`, error);
   } finally {
