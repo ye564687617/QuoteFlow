@@ -1,0 +1,108 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-app-environment: &app-environment
+  NODE_ENV: production
+  DATABASE_URL: postgresql://quoteflow:${POSTGRES_PASSWORD}@postgres:5432/quoteflow?schema=public
+  STORAGE_ROOT: /data/quoteflow
+  APP_URL: http://app:3000
+  CHROMIUM_EXECUTABLE_PATH: /usr/bin/chromium
+  SESSION_SECRET: ${SESSION_SECRET}
+  EXPORT_RENDER_TOKEN: ${EXPORT_RENDER_TOKEN}
+  BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}
+  INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL}
+  INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD}
+  INITIAL_ADMIN_NAME: ${INITIAL_ADMIN_NAME}
+  INITIAL_SALESPERSON_EMAIL: ${INITIAL_SALESPERSON_EMAIL}
+  INITIAL_SALESPERSON_PASSWORD: ${INITIAL_SALESPERSON_PASSWORD}
+  INITIAL_SALESPERSON_NAME: ${INITIAL_SALESPERSON_NAME}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: quoteflow
+      POSTGRES_USER: quoteflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ${DATA_ROOT}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quoteflow -d quoteflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *default-logging
+
+  migrate:
+    build: .
+    restart: "no"
+    environment: *app-environment
+    command: ["sh", "-c", "pnpm db:deploy && pnpm db:seed"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *default-logging
+
+  app:
+    build: .
+    restart: unless-stopped
+    init: true
+    environment: *app-environment
+    volumes:
+      - ${DATA_ROOT}/products:/data/quoteflow/products
+      - ${DATA_ROOT}/quotes:/data/quoteflow/quotes
+      - ${DATA_ROOT}/imports:/data/quoteflow/imports
+      - ${DATA_ROOT}/company:/data/quoteflow/company
+    expose:
+      - "3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    logging: *default-logging
+
+  worker:
+    build: .
+    restart: unless-stopped
+    init: true
+    command: ["pnpm", "worker"]
+    environment: *app-environment
+    volumes:
+      - ${DATA_ROOT}/products:/data/quoteflow/products
+      - ${DATA_ROOT}/quotes:/data/quoteflow/quotes
+      - ${DATA_ROOT}/imports:/data/quoteflow/imports
+      - ${DATA_ROOT}/company:/data/quoteflow/company
+    depends_on:
+      app:
+        condition: service_healthy
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${DATA_ROOT}/caddy-data:/data
+      - ${DATA_ROOT}/caddy-config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    logging: *default-logging

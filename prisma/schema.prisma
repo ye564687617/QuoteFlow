@@ -1,0 +1,232 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  SALESPERSON
+}
+
+enum QuoteStatus {
+  DRAFT
+  FINALIZED
+}
+
+enum ExportStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  displayName  String
+  piPrefix     String
+  role         UserRole      @default(SALESPERSON)
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  customers    Customer[]
+  quoteSeries  QuoteSeries[]
+  auditLogs    AuditLog[]
+}
+
+model CompanyProfile {
+  id                    String   @id @default("default")
+  legalName             String
+  plantAddress          String?
+  telephone             String?
+  fax                   String?
+  mobile                String?
+  website               String?
+  email                 String?
+  skype                 String?
+  logoPath              String?
+  bankName              String?
+  beneficiaryName       String?
+  beneficiaryAccount    String?
+  swiftCode             String?
+  bankAddress           String?
+  companyAddress        String?
+  defaultDeliveryTerms  String?
+  defaultPaymentTerms   String?
+  defaultProductionTime String?
+  updatedAt             DateTime @updatedAt
+}
+
+model Product {
+  id           String         @id @default(cuid())
+  pn           String
+  pnNormalized String         @unique
+  name         String?
+  description  String
+  unit         String
+  category     String?
+  attributes   Json?
+  archivedAt   DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  assets       ProductAsset[]
+  quoteItems   QuoteItem[]
+
+  @@index([archivedAt, pnNormalized])
+}
+
+model ProductAsset {
+  id            String   @id @default(cuid())
+  productId     String
+  storagePath   String   @unique
+  thumbnailPath String   @unique
+  mimeType      String
+  byteSize      Int
+  width         Int
+  height        Int
+  isPrimary     Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, isPrimary])
+}
+
+model Customer {
+  id            String        @id @default(cuid())
+  ownerId       String
+  internalLabel String
+  recipientName String?
+  companyName   String?
+  telephone     String?
+  email         String?
+  taxId         String?
+  shipTo        String?
+  notes         String?
+  archivedAt    DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  owner         User          @relation(fields: [ownerId], references: [id])
+  quoteSeries   QuoteSeries[]
+
+  @@index([ownerId, archivedAt])
+}
+
+model QuoteSeries {
+  id            String          @id @default(cuid())
+  basePiNumber  String          @unique
+  quoteDate     DateTime        @db.Date
+  dailySequence Int
+  salespersonId String
+  customerId    String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  salesperson   User            @relation(fields: [salespersonId], references: [id])
+  customer      Customer?       @relation(fields: [customerId], references: [id])
+  revisions     QuoteRevision[]
+
+  @@unique([salespersonId, quoteDate, dailySequence])
+  @@index([salespersonId, createdAt])
+}
+
+model QuoteRevision {
+  id                  String      @id @default(cuid())
+  seriesId            String
+  revisionNumber      Int
+  displayPiNumber     String      @unique
+  revisionDate        DateTime    @db.Date
+  status              QuoteStatus @default(DRAFT)
+  recipientName       String?
+  customerCompanyName String?
+  telephone           String?
+  email               String?
+  taxId               String?
+  shipTo              String?
+  companySnapshot     Json
+  salespersonSnapshot Json
+  deliveryTerms       String?
+  paymentTerms        String?
+  productionTime      String?
+  shippingNote        String?
+  shippingFee         Decimal     @default(0) @db.Decimal(18, 2)
+  subtotal            Decimal     @default(0) @db.Decimal(18, 2)
+  total               Decimal     @default(0) @db.Decimal(18, 2)
+  exportedPath        String?
+  exportedAt          DateTime?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  series              QuoteSeries @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  items               QuoteItem[]
+  exportJob           ExportJob?
+
+  @@unique([seriesId, revisionNumber])
+  @@index([status, createdAt])
+}
+
+model QuoteItem {
+  id                  String        @id @default(cuid())
+  revisionId          String
+  position            Int
+  productId           String?
+  pnSnapshot          String
+  nameSnapshot        String?
+  descriptionSnapshot String
+  unitSnapshot        String
+  imagePathSnapshot   String?
+  quantity            Decimal       @db.Decimal(18, 3)
+  unitPrice           Decimal       @db.Decimal(18, 4)
+  amount              Decimal       @db.Decimal(18, 2)
+  revision            QuoteRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  product             Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@unique([revisionId, position])
+}
+
+model ExportJob {
+  id         String        @id @default(cuid())
+  revisionId String        @unique
+  status     ExportStatus  @default(PENDING)
+  attempts   Int           @default(0)
+  error      String?
+  outputPath String?
+  createdAt  DateTime      @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+  revision   QuoteRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String
+  details    Json?
+  createdAt  DateTime @default(now())
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, createdAt])
+}
+
+model CloudBackupConnection {
+  id                    String   @id @default("google-drive")
+  provider              String   @default("GOOGLE_DRIVE")
+  accountEmail          String
+  refreshTokenEncrypted String   @db.Text
+  driveFileId           String?
+  driveFileName         String   @default("QuoteFlow-latest-backup.tar.gz")
+  driveWebViewLink      String?
+  status                String   @default("IDLE")
+  lastBackupAt          DateTime?
+  lastBackupSize        BigInt?
+  lastChecksum          String?
+  lastError             String?  @db.Text
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}

@@ -1,0 +1,14 @@
+"use client";
+
+import { Button, Field, Input, Textarea } from "@fluentui/react-components";
+import { Save24Regular } from "@fluentui/react-icons";
+import { FormEvent, useState } from "react";
+import { fetchJson } from "@/lib/client-api";
+
+type Company=Record<string,string|null>;
+const fields=[
+  ["legalName","公司英文名称","input"],["plantAddress","Plant Address","textarea"],["telephone","Tel","input"],["fax","Fax","input"],["mobile","Mobile","input"],["website","Website","input"],["email","Email","input"],["skype","Skype","input"],
+  ["bankName","Beneficiary bank","input"],["beneficiaryName","Beneficiary Name","input"],["beneficiaryAccount","Beneficiary Account","input"],["swiftCode","Swift Code","input"],["bankAddress","Bank Address","textarea"],["companyAddress","Company Address","textarea"],
+  ["defaultDeliveryTerms","默认交期","textarea"],["defaultPaymentTerms","默认付款条件","textarea"],["defaultProductionTime","默认生产周期","textarea"],
+] as const;
+export function CompanyForm({initialCompany}:{initialCompany:Company}){const[form,setForm]=useState(()=>Object.fromEntries(fields.map(([k])=>[k,initialCompany?.[k]??""])));const[logo,setLogo]=useState<File|null>(null);const[busy,setBusy]=useState(false);const[message,setMessage]=useState("");const[error,setError]=useState("");async function save(e:FormEvent){e.preventDefault();setBusy(true);setMessage("");setError("");try{await fetchJson("/api/settings/company",{method:"PUT",body:JSON.stringify(form)});if(logo){const logoForm=new FormData();logoForm.append("logo",logo);await fetchJson("/api/settings/company/logo",{method:"POST",body:logoForm})}setMessage("公司资料已保存。新建报价将使用这些默认值，旧报价不会改变。")}catch(e){setError(e instanceof Error?e.message:"保存失败")}finally{setBusy(false)}}return <><header className="page-header"><div><h1>公司资料</h1><p>这些资料会在创建报价时写入不可变快照</p></div></header><form className="panel" onSubmit={save}><div style={{padding:20}}><div className="form-grid"><Field label="公司 Logo" hint="可选，JPG、PNG 或 WebP，最大 8MB" className="form-span-2"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>setLogo(e.target.files?.[0]??null)}/></Field>{fields.map(([key,label,type])=><Field key={key} label={label} required={key==="legalName"} className={type==="textarea"?"form-span-2":undefined}>{type==="textarea"?<Textarea resize="vertical" rows={3} value={form[key]} onChange={(_,d)=>setForm({...form,[key]:d.value})}/>:<Input value={form[key]} onChange={(_,d)=>setForm({...form,[key]:d.value})}/>}</Field>)}</div>{error?<div className="error-banner" style={{marginTop:16}}>{error}</div>:null}{message?<div className="success-banner" style={{marginTop:16}}>{message}</div>:null}</div><div style={{display:"flex",justifyContent:"flex-end",padding:"12px 20px",borderTop:"1px solid var(--line)"}}><Button type="submit" appearance="primary" icon={<Save24Regular/>} disabled={busy}>{busy?"保存中":"保存公司资料"}</Button></div></form></>}

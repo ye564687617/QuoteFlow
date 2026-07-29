@@ -1,0 +1,255 @@
+.canvas {
+  margin: 0;
+  min-height: 100vh;
+  padding: 24px;
+  background: #ffffff;
+  color: #111111;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.document {
+  width: 900px;
+  margin: 0 auto;
+  background: #ffffff;
+  font-size: 16px;
+}
+
+.companyHeader {
+  border: 1px solid #111111;
+}
+
+.brandRow {
+  display: grid;
+  grid-template-columns: 285px 1fr;
+  min-height: 90px;
+  border-bottom: 1px solid #111111;
+}
+
+.logoCell {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px 4px 0;
+}
+
+.logo {
+  display: block;
+  width: 278px;
+  height: 80px;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.companyName {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-right: 80px;
+  font-size: 17px;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.contactGrid {
+  display: grid;
+  grid-template-columns: 92px 1fr 62px 262px;
+  line-height: 1.25;
+}
+
+.contactGrid strong,
+.contactGrid span {
+  min-height: 21px;
+  padding: 2px 4px;
+  border-right: 1px solid #e3e3e3;
+  border-bottom: 1px solid #e3e3e3;
+  overflow-wrap: anywhere;
+}
+
+.contactGrid strong:nth-last-child(-n + 4),
+.contactGrid span:nth-last-child(-n + 4) {
+  border-bottom: 0;
+}
+
+.plantAddress {
+  grid-column: 2 / 5;
+  min-height: 46px !important;
+}
+
+.titleBlock {
+  position: relative;
+  height: 63px;
+  border-bottom: 1px solid #111111;
+}
+
+.titleBlock h1 {
+  margin: 0;
+  padding-top: 12px;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 400;
+}
+
+.titleBlock div {
+  position: absolute;
+  right: 4px;
+  bottom: 7px;
+}
+
+.metaGrid {
+  display: grid;
+  grid-template-columns: 590px 310px;
+  border-left: 1px solid #111111;
+  font-size: 16px;
+}
+
+.metaGrid div {
+  min-height: 25px;
+  padding: 3px 4px;
+  border-right: 1px solid #111111;
+  border-bottom: 1px solid #111111;
+}
+
+.customerGrid {
+  display: grid;
+  grid-template-columns: 590px 64px 246px;
+  min-height: 99px;
+  border-left: 1px solid #111111;
+  border-bottom: 1px solid #111111;
+}
+
+.customerRows {
+  display: grid;
+  grid-template-rows: repeat(3, 33px);
+}
+
+.customerRows > div {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  border-bottom: 1px solid #111111;
+}
+
+.customerRows > div:last-child {
+  border-bottom: 0;
+}
+
+.customerRows strong,
+.customerRows span {
+  display: flex;
+  align-items: center;
+  padding: 3px 4px;
+}
+
+.customerRows strong {
+  font-weight: 400;
+}
+
+.shipLabel,
+.shipValue {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-left: 1px solid #111111;
+  border-right: 1px solid #111111;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.shipLabel {
+  border-right: 0;
+  font-weight: 400;
+}
+
+.items,
+.summary {
+  width: 900px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.itemColumn { width: 40px; }
+.photoColumn { width: 128px; }
+.pnColumn { width: 120px; }
+.descriptionColumn { width: 282px; }
+.unitColumn { width: 58px; }
+.qtyColumn { width: 65px; }
+.priceColumn { width: 88px; }
+.amountColumn { width: 119px; }
+
+.items th,
+.items td,
+.summary td {
+  border: 1px solid #111111;
+  padding: 3px;
+  text-align: center;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.items th {
+  height: 46px;
+  background: #ffffff;
+  font-weight: 400;
+}
+
+.items tbody tr {
+  height: 126px;
+}
+
+.items img {
+  display: block;
+  width: 120px;
+  height: 118px;
+  margin: 0 auto;
+  object-fit: contain;
+}
+
+.items .description {
+  text-align: center;
+  white-space: pre-line;
+  line-height: 1.35;
+}
+
+.summary {
+  margin-top: -1px;
+}
+
+.summary td {
+  height: 29px;
+  padding: 2px 4px;
+  font-weight: 400;
+}
+
+.summary tr:first-child td:nth-child(2),
+.summary tr:first-child td:nth-child(3) {
+  text-align: left;
+}
+
+.summary .total {
+  color: #ff0000;
+}
+
+.signature {
+  box-sizing: border-box;
+  min-height: 64px;
+  margin-top: -1px;
+  padding-left: 630px;
+  border: 1px solid #111111;
+  border-top: 0;
+  text-align: center;
+  line-height: 30px;
+}
+
+.signatureCompany {
+  text-decoration: underline;
+}
+
+@media (max-width: 948px) {
+  .canvas {
+    overflow-x: auto;
+    padding: 12px;
+  }
+
+  .document {
+    margin: 0;
+  }
+}

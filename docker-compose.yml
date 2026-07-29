@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: quoteflow
+      POSTGRES_USER: quoteflow
+      POSTGRES_PASSWORD: quoteflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quoteflow -d quoteflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    profiles: ["production"]
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://quoteflow:quoteflow@postgres:5432/quoteflow?schema=public
+      STORAGE_ROOT: /data/quoteflow
+      CHROMIUM_EXECUTABLE_PATH: /usr/bin/chromium
+    ports:
+      - "3000:3000"
+    volumes:
+      - quoteflow_data:/data/quoteflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    profiles: ["production"]
+    build: .
+    command: ["pnpm", "worker"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://quoteflow:quoteflow@postgres:5432/quoteflow?schema=public
+      STORAGE_ROOT: /data/quoteflow
+      APP_URL: http://app:3000
+      CHROMIUM_EXECUTABLE_PATH: /usr/bin/chromium
+    volumes:
+      - quoteflow_data:/data/quoteflow
+    depends_on:
+      - app
+
+volumes:
+  postgres_data:
+  quoteflow_data:
