@@ -63,21 +63,24 @@ model CompanyProfile {
 }
 
 model Product {
-  id           String         @id @default(cuid())
-  pn           String
-  pnNormalized String         @unique
-  name         String?
-  description  String
-  unit         String
-  category     String?
-  attributes   Json?
-  archivedAt   DateTime?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  assets       ProductAsset[]
-  quoteItems   QuoteItem[]
+  id                    String         @id @default(cuid())
+  pn                    String
+  pnNormalized          String
+  name                  String?
+  description           String
+  descriptionNormalized String
+  variantLabel          String
+  unit                  String
+  regularPriceUsd       Decimal        @default(0) @db.Decimal(18, 4)
+  attributes            Json?
+  archivedAt            DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  assets                ProductAsset[]
+  quoteItems            QuoteItem[]
 
   @@index([archivedAt, pnNormalized])
+  @@index([pnNormalized, descriptionNormalized])
 }
 
 model ProductAsset {
@@ -123,6 +126,7 @@ model QuoteSeries {
   dailySequence Int
   salespersonId String
   customerId    String?
+  nextRevisionNumber Int             @default(2)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   salesperson   User            @relation(fields: [salespersonId], references: [id])
@@ -151,11 +155,9 @@ model QuoteRevision {
   deliveryTerms       String?
   paymentTerms        String?
   productionTime      String?
-  shippingNote        String?
   shippingFee         Decimal     @default(0) @db.Decimal(18, 2)
   subtotal            Decimal     @default(0) @db.Decimal(18, 2)
   total               Decimal     @default(0) @db.Decimal(18, 2)
-  exportedPath        String?
   exportedAt          DateTime?
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
@@ -173,6 +175,7 @@ model QuoteItem {
   position            Int
   productId           String?
   pnSnapshot          String
+  variantLabelSnapshot String?
   nameSnapshot        String?
   descriptionSnapshot String
   unitSnapshot        String
@@ -187,16 +190,19 @@ model QuoteItem {
 }
 
 model ExportJob {
-  id         String        @id @default(cuid())
-  revisionId String        @unique
-  status     ExportStatus  @default(PENDING)
-  attempts   Int           @default(0)
-  error      String?
-  outputPath String?
-  createdAt  DateTime      @default(now())
-  startedAt  DateTime?
-  finishedAt DateTime?
-  revision   QuoteRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  id              String        @id @default(cuid())
+  revisionId      String        @unique
+  status          ExportStatus  @default(PENDING)
+  attempts        Int           @default(0)
+  error           String?
+  pngNoBankPath   String?
+  pngWithBankPath String?
+  pdfNoBankPath   String?
+  pdfWithBankPath String?
+  createdAt       DateTime      @default(now())
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  revision        QuoteRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
 }

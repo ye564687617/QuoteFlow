@@ -19,14 +19,14 @@ function chromiumPath() {
   return found;
 }
 
-async function renderUrl(revisionId: string) {
+async function renderUrl(revisionId: string, withBank: boolean) {
   const url = new URL(env().APP_URL);
   if (url.protocol === "http:" && url.hostname === "app") {
     const { address } = await dns.lookup(url.hostname, { family: 4 });
     url.hostname = address;
   }
   url.pathname = `/render/quotes/${encodeURIComponent(revisionId)}`;
-  url.search = new URLSearchParams({ token: env().EXPORT_RENDER_TOKEN }).toString();
+  url.search = new URLSearchParams({ token: env().EXPORT_RENDER_TOKEN, bank: withBank ? "1" : "0" }).toString();
   return url.toString();
 }
 
@@ -57,20 +57,33 @@ export async function processNextExport() {
       args: ["--no-sandbox", "--disable-dev-shm-usage", "--no-proxy-server", "--disable-features=HttpsUpgrades"],
     });
     const page = await browser.newPage({ viewport: { width: 1240, height: 900 }, deviceScaleFactor: 2 });
-    const url = await renderUrl(pending.revisionId);
-    await page.goto(url, { waitUntil: "networkidle", timeout: 60_000 });
-    await page.waitForSelector("[data-quote-ready='true']", { timeout: 30_000 });
-    await page.evaluate(() => document.fonts.ready);
-    const documentNode = page.locator(".quote-document");
-    const box = await documentNode.boundingBox();
-    if (!box) throw new Error("报价版式渲染失败");
-    if (box.height > 28_000) throw new Error("报价内容过长，请拆分为两张报价后重试");
-    const png = await documentNode.screenshot({ type: "png", animations: "disabled" });
-    const outputPath = `quotes/${pending.revision.seriesId}/R${String(pending.revision.revisionNumber).padStart(2, "0")}.png`;
-    await storage.put(outputPath, png);
+    await page.emulateMedia({ media: "screen" });
+    const render = async (withBank: boolean) => {
+      await page.goto(await renderUrl(pending.revisionId, withBank), { waitUntil: "networkidle", timeout: 60_000 });
+      await page.waitForSelector("[data-quote-ready='true']", { timeout: 30_000 });
+      await page.evaluate(() => document.fonts.ready);
+      const documentNode = page.locator(".quote-document");
+      const box = await documentNode.boundingBox();
+      if (!box) throw new Error("报价版式渲染失败");
+      if (box.height > 28_000) throw new Error("报价内容过长，请拆分为两张报价后重试");
+      const png = await documentNode.screenshot({ type: "png", animations: "disabled" });
+      await page.evaluate(() => document.querySelectorAll("nextjs-portal").forEach((node) => node.remove()));
+      await page.addStyleTag({ content: "html, body, .canvas { margin: 0 !important; padding: 0 !important; min-height: 0 !important; background: #fff !important; } .document { margin: 0 !important; }" });
+      const pdfBox = await documentNode.boundingBox();
+      if (!pdfBox) throw new Error("PDF 版式渲染失败");
+      // Chromium converts CSS pixels to PDF points and can round the final row
+      // onto a second page. A small white allowance keeps the long PI on one page.
+      const pdf = await page.pdf({ width: `${Math.ceil(pdfBox.width) + 2}px`, height: `${Math.ceil(pdfBox.height) + 64}px`, margin: { top: "0", right: "0", bottom: "0", left: "0" }, printBackground: true });
+      return { png, pdf };
+    };
+    const noBank = await render(false);
+    const withBank = await render(true);
+    const basePath = `quotes/${pending.revision.seriesId}/R${String(pending.revision.revisionNumber).padStart(2, "0")}`;
+    const paths = { pngNoBankPath: `${basePath}-no-bank.png`, pngWithBankPath: `${basePath}-with-bank.png`, pdfNoBankPath: `${basePath}-no-bank.pdf`, pdfWithBankPath: `${basePath}-with-bank.pdf` };
+    await Promise.all([storage.put(paths.pngNoBankPath, noBank.png), storage.put(paths.pngWithBankPath, withBank.png), storage.put(paths.pdfNoBankPath, noBank.pdf), storage.put(paths.pdfWithBankPath, withBank.pdf)]);
     await db.$transaction([
-      db.quoteRevision.update({ where: { id: pending.revisionId }, data: { exportedPath: outputPath, exportedAt: new Date() } }),
-      db.exportJob.update({ where: { id: pending.id }, data: { status: "READY", outputPath, finishedAt: new Date() } }),
+      db.quoteRevision.update({ where: { id: pending.revisionId }, data: { exportedAt: new Date() } }),
+      db.exportJob.update({ where: { id: pending.id }, data: { status: "READY", ...paths, finishedAt: new Date() } }),
     ]);
   } catch (error) {
     const message = error instanceof Error ? sanitizeExportError(error.message).slice(0, 1000) : "未知导出错误";

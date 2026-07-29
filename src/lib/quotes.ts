@@ -6,6 +6,7 @@ import { shanghaiDateParts } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { lineAmount, quoteTotals } from "@/lib/money";
 import { nullable, quoteDraftSchema } from "@/lib/validation";
+import { storage } from "@/lib/storage";
 
 export type CompanySnapshot = {
   legalName: string;
@@ -143,7 +144,6 @@ export async function saveQuoteRevision(id: string, user: SessionUser, input: un
         deliveryTerms: nullable(data.deliveryTerms),
         paymentTerms: nullable(data.paymentTerms),
         productionTime: nullable(data.productionTime),
-        shippingNote: nullable(data.shippingNote),
         shippingFee: new Prisma.Decimal(data.shippingFee),
         subtotal: new Prisma.Decimal(totals.subtotal.toFixed(2)),
         total: new Prisma.Decimal(totals.total.toFixed(2)),
@@ -152,6 +152,7 @@ export async function saveQuoteRevision(id: string, user: SessionUser, input: un
             position: index + 1,
             productId: item.productId,
             pnSnapshot: item.pnSnapshot,
+            variantLabelSnapshot: nullable(item.variantLabelSnapshot),
             nameSnapshot: nullable(item.nameSnapshot),
             descriptionSnapshot: item.descriptionSnapshot,
             unitSnapshot: item.unitSnapshot,
@@ -171,24 +172,24 @@ export async function saveQuoteRevision(id: string, user: SessionUser, input: un
 
 export async function deleteDraftRevision(id: string, user: SessionUser) {
   const current = await getQuoteRevision(id, user);
-  if (current.status !== QuoteStatus.DRAFT) throw new ApiError(409, "已锁定的报价不能删除");
-
-  return db.$transaction(async (tx) => {
+  const result = await db.$transaction(async (tx) => {
     const revisionCount = await tx.quoteRevision.count({ where: { seriesId: current.seriesId } });
-    const deleted = await tx.quoteRevision.deleteMany({ where: { id, status: QuoteStatus.DRAFT } });
+    const deleted = await tx.quoteRevision.deleteMany({ where: { id } });
     if (!deleted.count) throw new ApiError(409, "报价状态已改变，请刷新后重试");
     if (revisionCount === 1) await tx.quoteSeries.delete({ where: { id: current.seriesId } });
     await tx.auditLog.create({
       data: {
         actorId: user.id,
-        action: "QUOTE_DRAFT_DELETED",
+      action: current.status === QuoteStatus.FINALIZED ? "QUOTE_FINALIZED_DELETED" : "QUOTE_DRAFT_DELETED",
         entityType: "QuoteRevision",
         entityId: id,
         details: { displayPiNumber: current.displayPiNumber, deletedSeries: revisionCount === 1 },
       },
     });
-    return { deletedSeries: revisionCount === 1 };
+    return { deletedSeries: revisionCount === 1, paths: [current.exportJob?.pngNoBankPath, current.exportJob?.pngWithBankPath, current.exportJob?.pdfNoBankPath, current.exportJob?.pdfWithBankPath].filter((path): path is string => Boolean(path)) };
   });
+  await Promise.allSettled(result.paths.map((path) => storage.remove(path)));
+  return { deletedSeries: result.deletedSeries };
 }
 
 export async function finalizeQuote(id: string, user: SessionUser) {
@@ -204,7 +205,7 @@ export async function finalizeQuote(id: string, user: SessionUser) {
     });
     await tx.exportJob.upsert({
       where: { revisionId: id },
-      update: { status: "PENDING", error: null, outputPath: null },
+      update: { status: "PENDING", error: null, pngNoBankPath: null, pngWithBankPath: null, pdfNoBankPath: null, pdfWithBankPath: null, startedAt: null, finishedAt: null },
       create: { revisionId: id },
     });
     await tx.auditLog.create({ data: { actorId: user.id, action: "QUOTE_FINALIZED", entityType: "QuoteRevision", entityId: id } });
@@ -219,7 +220,7 @@ export async function retryQuoteExport(id: string, user: SessionUser) {
   await db.$transaction([
     db.exportJob.update({
       where: { id: current.exportJob.id },
-      data: { status: "PENDING", error: null, outputPath: null, startedAt: null, finishedAt: null },
+      data: { status: "PENDING", error: null, pngNoBankPath: null, pngWithBankPath: null, pdfNoBankPath: null, pdfWithBankPath: null, startedAt: null, finishedAt: null },
     }),
     db.auditLog.create({ data: { actorId: user.id, action: "QUOTE_EXPORT_RETRIED", entityType: "QuoteRevision", entityId: id } }),
   ]);
@@ -230,9 +231,16 @@ export async function createRevision(id: string, user: SessionUser) {
   const current = await getQuoteRevision(id, user);
   if (current.status !== QuoteStatus.FINALIZED) throw new ApiError(409, "草稿无需创建新一轮");
   const { databaseDate } = shanghaiDateParts();
-  const nextNumber = Math.max(...(await db.quoteRevision.findMany({ where: { seriesId: current.seriesId }, select: { revisionNumber: true } })).map((item) => item.revisionNumber)) + 1;
-  const displayPiNumber = `${current.series.basePiNumber}-R${String(nextNumber).padStart(2, "0")}`;
   return db.$transaction(async (tx) => {
+    // A per-series advisory lock prevents two clicks from allocating the same R number.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${current.seriesId}))`;
+    const series = await tx.quoteSeries.update({
+      where: { id: current.seriesId },
+      data: { nextRevisionNumber: { increment: 1 } },
+      select: { basePiNumber: true, nextRevisionNumber: true },
+    });
+    const nextNumber = series.nextRevisionNumber - 1;
+    const displayPiNumber = `${series.basePiNumber}-R${String(nextNumber).padStart(2, "0")}`;
     const revision = await tx.quoteRevision.create({
       data: {
         seriesId: current.seriesId,
@@ -250,7 +258,6 @@ export async function createRevision(id: string, user: SessionUser) {
         deliveryTerms: current.deliveryTerms,
         paymentTerms: current.paymentTerms,
         productionTime: current.productionTime,
-        shippingNote: current.shippingNote,
         shippingFee: current.shippingFee,
         subtotal: current.subtotal,
         total: current.total,
@@ -259,6 +266,7 @@ export async function createRevision(id: string, user: SessionUser) {
             position: item.position,
             productId: item.productId,
             pnSnapshot: item.pnSnapshot,
+            variantLabelSnapshot: item.variantLabelSnapshot,
             nameSnapshot: item.nameSnapshot,
             descriptionSnapshot: item.descriptionSnapshot,
             unitSnapshot: item.unitSnapshot,

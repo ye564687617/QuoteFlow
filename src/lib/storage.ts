@@ -17,11 +17,13 @@ function safeKey(key: string) {
   return normalized;
 }
 
+const localStorageRoot = path.resolve("./data");
+
 export class LocalFileStorage implements FileStorage {
-  constructor(private root = path.resolve(process.env.STORAGE_ROOT ?? "./data")) {}
+  constructor(private root = path.resolve(process.env.STORAGE_ROOT ?? localStorageRoot)) {}
 
   absolutePath(key: string) {
-    const target = path.resolve(this.root, safeKey(key));
+    const target = path.resolve(/* turbopackIgnore: true */ this.root, safeKey(key));
     if (!target.startsWith(`${this.root}${path.sep}`)) throw new Error("Invalid storage path");
     return target;
   }

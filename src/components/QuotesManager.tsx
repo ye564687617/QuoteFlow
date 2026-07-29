@@ -57,7 +57,7 @@ export function QuotesManager({ initialRevisions, customers, warmMessage }: Prop
   }
 
   async function removeDraft(revision: Row) {
-    if (!window.confirm(`确定删除草稿 ${revision.displayPiNumber} 吗？此操作无法撤销。`)) return;
+    if (!window.confirm(`确定删除报价 ${revision.displayPiNumber} 吗？此操作无法撤销。`)) return;
     setDeletingId(revision.id);
     setError("");
     try {
@@ -103,8 +103,8 @@ export function QuotesManager({ initialRevisions, customers, warmMessage }: Prop
                   <td data-label="状态"><span className={`status ${revision.status === "DRAFT" ? "status-draft" : "status-final"}`}>{revision.status === "DRAFT" ? "草稿" : "已锁定"}</span></td>
                   <td data-label="操作"><div className="table-actions">
                     <Button as="a" href={`/quotes/${revision.id}`} appearance="subtle" icon={<Edit24Regular />}>{revision.status === "DRAFT" ? "编辑" : "查看"}</Button>
-                    {revision.status === "DRAFT" ? <Button appearance="subtle" icon={<Delete24Regular />} disabled={deletingId === revision.id} onClick={() => removeDraft(revision)} style={{ color: "var(--danger)" }}>{deletingId === revision.id ? "删除中" : "删除"}</Button> : null}
-                    {revision.status === "FINALIZED" && revision.exportJob?.status === "READY" ? <Button as="a" href={`/api/quotes/${revision.id}/download`} appearance="subtle" icon={<ArrowDownload24Regular />} aria-label="下载" /> : null}
+                    <Button appearance="subtle" icon={<Delete24Regular />} disabled={deletingId === revision.id} onClick={() => removeDraft(revision)} style={{ color: "var(--danger)" }}>{deletingId === revision.id ? "删除中" : "删除"}</Button>
+                    {revision.status === "FINALIZED" && revision.exportJob?.status === "READY" ? <Button as="a" href={`/api/quotes/${revision.id}/download?format=png&bank=0`} appearance="subtle" icon={<ArrowDownload24Regular />} aria-label="下载无银行 PNG" /> : null}
                   </div></td>
                 </tr>
               ))}</tbody>

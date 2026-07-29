@@ -15,12 +15,14 @@ import {
 import { ArrowUpload24Regular } from "@fluentui/react-icons";
 import { useState } from "react";
 import { fetchJson } from "@/lib/client-api";
+import styles from "./ProductImportDialog.module.css";
 
 type ImportStatus = "NEW" | "UPDATE" | "DUPLICATE" | "ERROR";
 type Preview = {
   rows: Array<{
     rowNumber: number;
     pn: string;
+    variantLabel: string;
     description: string;
     unit: string;
     status: ImportStatus;
@@ -87,7 +89,7 @@ export function ProductImportDialog({ onImported }: { onImported: () => Promise<
   return <>
     <Button icon={<ArrowUpload24Regular />} onClick={() => setOpen(true)}>批量导入</Button>
     <Dialog open={open} onOpenChange={(_, data) => setOpen(data.open)}>
-      <DialogSurface style={{ maxWidth: 820, width: "calc(100vw - 32px)" }}>
+      <DialogSurface className={styles.surface}>
         <DialogBody>
           <DialogTitle>批量导入产品</DialogTitle>
           <DialogContent>
@@ -108,16 +110,17 @@ export function ProductImportDialog({ onImported }: { onImported: () => Promise<
                 {preview.summary.errors ? <span className="status status-failed">错误 {preview.summary.errors}</span> : null}
               </div>
               <RadioGroup value={mode} onChange={(_, data) => setMode(data.value)} layout="horizontal">
-                <Radio value="skip" label="跳过已有 P/N" />
+                <Radio value="skip" label="跳过已有 P/N + Description" />
                 <Radio value="update" label="更新已有产品" />
               </RadioGroup>
-              <div className="table-scroll" style={{ maxHeight: 330, marginTop: 12, border: "1px solid var(--line)" }}>
-                <table className="data-table mobile-cards">
-                  <thead><tr><th style={{ width: 58 }}>行</th><th style={{ width: 190 }}>P/N</th><th>Description</th><th style={{ width: 80 }}>Unit</th><th style={{ width: 80 }}>图片</th><th style={{ width: 100 }}>结果</th></tr></thead>
+              <div className={`table-scroll ${styles.previewScroll}`}>
+                <table className={`data-table mobile-cards ${styles.previewTable}`}>
+                  <thead><tr><th style={{ width: 58 }}>行</th><th style={{ width: 190 }}>P/N</th><th style={{ width: 170 }}>变体</th><th style={{ width: 400 }}>Description</th><th style={{ width: 70 }}>Unit</th><th style={{ width: 80 }}>图片</th><th style={{ width: 92 }}>结果</th></tr></thead>
                   <tbody>{preview.rows.map((row) => <tr key={row.rowNumber}>
                     <td data-label="行">{row.rowNumber}</td>
                     <td data-label="P/N">{row.pn || "-"}</td>
-                    <td data-label="Description">{row.errors.length ? row.errors.join("；") : row.description}</td>
+                    <td data-label="变体"><div className={styles.variant} title={row.variantLabel}>{row.variantLabel || "-"}</div></td>
+                    <td data-label="Description"><div className={styles.description} title={row.description}>{row.errors.length ? row.errors.join("；") : row.description}</div></td>
                     <td data-label="Unit">{row.unit || "-"}</td>
                     <td data-label="图片">{row.hasImage ? "已匹配" : "无"}</td>
                     <td data-label="结果"><span className={`status ${row.status === "ERROR" ? "status-failed" : row.status === "UPDATE" || row.status === "DUPLICATE" ? "status-draft" : "status-final"}`}>{statusLabel[row.status]}</span></td>

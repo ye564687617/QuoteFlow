@@ -5,7 +5,7 @@ export const productSchema = z.object({
   name: z.string().trim().max(200).optional().nullable(),
   description: z.string().trim().min(1, "Description 不能为空").max(5000),
   unit: z.string().trim().min(1, "Unit 不能为空").max(40),
-  category: z.string().trim().max(120).optional().nullable(),
+  regularPriceUsd: z.coerce.number().min(0, "常规单价不能为负数").max(999999999),
   attributes: z.record(z.string(), z.unknown()).optional().nullable(),
 });
 
@@ -23,6 +23,7 @@ export const customerSchema = z.object({
 export const quoteItemSchema = z.object({
   productId: z.string().optional().nullable(),
   pnSnapshot: z.string().trim().min(1).max(120),
+  variantLabelSnapshot: z.string().trim().max(120).optional().nullable(),
   nameSnapshot: z.string().trim().max(200).optional().nullable(),
   descriptionSnapshot: z.string().trim().min(1).max(5000),
   unitSnapshot: z.string().trim().min(1).max(40),
@@ -41,7 +42,6 @@ export const quoteDraftSchema = z.object({
   deliveryTerms: z.string().trim().max(1000).optional().nullable(),
   paymentTerms: z.string().trim().max(1000).optional().nullable(),
   productionTime: z.string().trim().max(1000).optional().nullable(),
-  shippingNote: z.string().trim().max(1000).optional().nullable(),
   shippingFee: z.coerce.number().min(0).max(999999999),
   items: z.array(quoteItemSchema).max(80),
 }).superRefine((quote, context) => {

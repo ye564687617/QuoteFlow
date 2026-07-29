@@ -16,6 +16,7 @@ body { color: var(--text); background: var(--app-bg); font-family: -apple-system
 a { color: inherit; text-decoration: none; }
 button, input, textarea, select { letter-spacing: 0; }
 img { max-width: 100%; }
+nextjs-portal { display: none !important; }
 .numeric { font-variant-numeric: tabular-nums; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 

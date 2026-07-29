@@ -14,6 +14,7 @@ const execFileAsync = promisify(execFile);
 const CONNECTION_ID = "google-drive";
 const BACKUP_FILE_NAME = "QuoteFlow-latest-backup.tar.gz";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const BACKUP_STORAGE_DIRECTORIES = ["products", "quotes", "imports", "company"] as const;
 
 function googleConfig() {
   const values = env();
@@ -140,9 +141,10 @@ export async function createBackupArchive() {
   const storageRoot = path.resolve(env().STORAGE_ROOT);
   try {
     await fs.mkdir(storageRoot, { recursive: true });
+    await Promise.all(BACKUP_STORAGE_DIRECTORIES.map((name) => fs.mkdir(path.join(storageRoot, name), { recursive: true })));
     await dumpDatabase(databaseDump);
-    await fs.writeFile(manifest, JSON.stringify({ format: "QuoteFlow backup v1", createdAt: new Date().toISOString(), database: "PostgreSQL custom dump", files: "STORAGE_ROOT" }, null, 2));
-    await execFileAsync("tar", ["-czf", archive, "-C", tempDirectory, "database.dump", "manifest.json", "-C", storageRoot, "."], { maxBuffer: 2 * 1024 * 1024 });
+    await fs.writeFile(manifest, JSON.stringify({ format: "QuoteFlow backup v1", createdAt: new Date().toISOString(), database: "PostgreSQL custom dump", files: BACKUP_STORAGE_DIRECTORIES }, null, 2));
+    await execFileAsync("tar", ["-czf", archive, "-C", tempDirectory, "database.dump", "manifest.json", "-C", storageRoot, ...BACKUP_STORAGE_DIRECTORIES], { maxBuffer: 2 * 1024 * 1024 });
     const file = await fs.stat(archive);
     const hash = crypto.createHash("md5");
     await new Promise<void>((resolve, reject) => { const stream = createReadStream(archive); stream.on("data", (chunk) => hash.update(chunk)); stream.on("error", reject); stream.on("end", () => resolve()); });

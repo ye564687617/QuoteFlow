@@ -14,7 +14,9 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "worker": "tsx src/worker.ts"
+    "storage:clear-business": "tsx scripts/clear-business-storage.ts",
+    "worker": "tsx src/worker.ts",
+    "worker:dev": "tsx watch src/worker.ts"
   },
   "dependencies": {
     "@fluentui/react-components": "^9.74.4",

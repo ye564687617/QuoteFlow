@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { imageMime, ImportRecord, parseProductImport } from "@/lib/product-import";
 import { prepareProductImage, storage } from "@/lib/storage";
 import { normalizePn, nullable } from "@/lib/validation";
+import { normalizeDescription, parseRegularPrice, refreshVariantLabels } from "@/lib/product-variants";
 
 export async function POST(request: Request) {
   const writtenKeys: string[] = [];
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
     if (invalid.length) throw new ApiError(400, `有 ${invalid.length} 行未通过检查，请修正后重新导入`);
 
     const existing = await db.product.findMany({ where: { pnNormalized: { in: parsed.records.map((record) => normalizePn(record.pn)) } } });
-    const existingMap = new Map(existing.map((product) => [product.pnNormalized, product]));
+    const existingMap = new Map(existing.map((product) => [`${product.pnNormalized}:${product.descriptionNormalized}`, product]));
     const prepared: Array<{
       record: ImportRecord;
       current: (typeof existing)[number] | undefined;
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
     }> = [];
     for (const record of parsed.records) {
       if (record.duplicate) continue;
-      const current = existingMap.get(normalizePn(record.pn));
+      const current = existingMap.get(`${normalizePn(record.pn)}:${normalizeDescription(record.description)}`);
       if (current && mode === "skip") continue;
       const productId = current?.id ?? crypto.randomUUID();
       let image = null;
@@ -43,7 +44,9 @@ export async function POST(request: Request) {
 
     await db.$transaction(async (tx) => {
       for (const item of prepared) {
-        const data = { pn: item.record.pn, pnNormalized: normalizePn(item.record.pn), name: nullable(item.record.name), description: item.record.description, unit: item.record.unit, category: nullable(item.record.category), attributes: item.record.attributes as Prisma.InputJsonValue };
+        const regularPriceUsd = parseRegularPrice(item.record.regularPriceUsd);
+        if (regularPriceUsd === null) throw new ApiError(400, `第 ${item.record.rowNumber} 行常规单价格式不正确`);
+        const data = { pn: item.record.pn, pnNormalized: normalizePn(item.record.pn), name: nullable(item.record.name), description: item.record.description, descriptionNormalized: normalizeDescription(item.record.description), variantLabel: "Variant", unit: item.record.unit, regularPriceUsd, attributes: item.record.attributes as Prisma.InputJsonValue };
         if (item.current) await tx.product.update({ where: { id: item.current.id }, data: { ...data, archivedAt: null } });
         else await tx.product.create({ data: { id: item.productId, ...data } });
         if (item.image) {
@@ -51,6 +54,7 @@ export async function POST(request: Request) {
           await tx.productAsset.create({ data: { productId: item.productId, ...item.image, isPrimary: true } });
         }
       }
+      for (const pnNormalized of new Set(prepared.map((item) => normalizePn(item.record.pn)))) await refreshVariantLabels(tx, pnNormalized);
       await tx.auditLog.create({ data: { actorId: user.id, action: "PRODUCTS_IMPORTED", entityType: "Product", entityId: "bulk", details: { mode, imported: prepared.length, skipped: parsed.records.length - prepared.length } } });
     });
     return NextResponse.json({ imported: prepared.length, skipped: parsed.records.length - prepared.length });

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { env } from "@/lib/env";
 import { getQuoteRevision, CompanySnapshot } from "@/lib/quotes";
 import { storage, mimeFromPath } from "@/lib/storage";
+import { splitElectricalSpecs } from "@/lib/quote-highlights";
 import styles from "./quote.module.css";
 
 async function imageDataUrl(key: string | null) {
@@ -23,7 +24,23 @@ function quantity(value: unknown) {
   return Number(value).toFixed(3).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
 }
 
-export default async function QuoteRenderPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ token?: string }> }) {
+function highlightedDescription(description: string) {
+  return splitElectricalSpecs(description).map((part, index) => part.highlighted
+    ? <span className={styles.important} key={index}>{part.text}</span>
+    : part.text);
+}
+
+function formattedDescription(description: string) {
+  const lines = description.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  return lines.map((line, index) => {
+    const content = index === 0 ? line : line.replace(/^[-–—•]\s*/, "");
+    return index === 0
+      ? <div className={styles.descriptionTitle} key={index}>{highlightedDescription(content)}</div>
+      : <div className={styles.descriptionLine} key={index}><span>-</span><span>{highlightedDescription(content)}</span></div>;
+  });
+}
+
+export default async function QuoteRenderPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ token?: string; bank?: string }> }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   if (query.token !== env().EXPORT_RENDER_TOKEN) notFound();
   const revision = await getQuoteRevision(id);
@@ -32,6 +49,7 @@ export default async function QuoteRenderPage({ params, searchParams }: { params
   const itemImages = await Promise.all(revision.items.map((item) => imageDataUrl(item.imagePathSnapshot)));
   const logo = await imageDataUrl(company.logoPath);
   const date = revision.revisionDate.toISOString().slice(0, 10).replaceAll("-", "");
+  const showBank = query.bank === "1";
 
   return (
     <main className={styles.canvas}>
@@ -65,7 +83,7 @@ export default async function QuoteRenderPage({ params, searchParams }: { params
           <div className={styles.customerRows}>
             <div><strong>To:</strong><span>{revision.recipientName}</span></div>
             <div><strong>Tel:</strong><span>{revision.telephone}</span></div>
-            <div><strong>email:</strong><span>{revision.email}</span></div>
+            <div><strong>Email:</strong><span>{revision.email}</span></div>
           </div>
           <strong className={styles.shipLabel}>Ship to</strong>
           <span className={styles.shipValue}>{revision.shipTo}</span>
@@ -77,14 +95,14 @@ export default async function QuoteRenderPage({ params, searchParams }: { params
             <col className={styles.descriptionColumn} /><col className={styles.unitColumn} /><col className={styles.qtyColumn} />
             <col className={styles.priceColumn} /><col className={styles.amountColumn} />
           </colgroup>
-          <thead><tr><th>Item</th><th>Photo</th><th>P/N</th><th>Description</th><th>Unit</th><th>QTY</th><th>Unit Price<br />(USD )</th><th>Amount<br />(USD )</th></tr></thead>
+          <thead><tr><th>Item</th><th>Photo</th><th>Part Number</th><th>Description</th><th>Unit</th><th>QTY</th><th>Unit Price<br />(USD )</th><th>Amount<br />(USD )</th></tr></thead>
           <tbody>
             {revision.items.map((item, index) => (
               <tr key={item.id}>
                 <td>{index + 1}</td>
                 <td>{itemImages[index] ? <img src={itemImages[index]!} alt={item.pnSnapshot} /> : null}</td>
                 <td>{item.pnSnapshot}</td>
-                <td className={styles.description}>{item.descriptionSnapshot}</td>
+                <td className={styles.description}>{formattedDescription(item.descriptionSnapshot)}</td>
                 <td>{item.unitSnapshot}</td>
                 <td>{quantity(item.quantity)}</td>
                 <td>{money(item.unitPrice)}</td>
@@ -101,11 +119,20 @@ export default async function QuoteRenderPage({ params, searchParams }: { params
             <col className={styles.priceColumn} /><col className={styles.amountColumn} />
           </colgroup>
           <tbody>
-            <tr><td></td><td>REMARK</td><td>Shipping fee</td><td colSpan={4}>{revision.shippingNote}</td><td>{money(revision.shippingFee)}</td></tr>
+            <tr><td></td><td>REMARK</td><td>Shipping fee</td><td colSpan={4}>UPS 6-9 working days shipping</td><td>{money(revision.shippingFee)}</td></tr>
             <tr><td colSpan={2}></td><td colSpan={4}>Production time: {revision.productionTime}</td><td>Total</td><td className={styles.total}>{money(revision.total)}</td></tr>
           </tbody>
         </table>
 
+        {showBank ? <section className={styles.bankInfo}>
+          <strong>Bank Information</strong>
+          <div>Beneficiary bank: <span className={styles.important}>{company.bankName}</span></div>
+          <div>Beneficiary Name: <span className={styles.important}>{company.beneficiaryName}</span></div>
+          <div>Beneficiary Account: <span className={styles.important}>{company.beneficiaryAccount}</span></div>
+          <div>Swift Code: <span className={styles.important}>{company.swiftCode}</span></div>
+          <div>Bank Address: <span>{company.bankAddress}</span></div>
+          <div>Company address: <span>{company.companyAddress}</span></div>
+        </section> : null}
         <footer className={styles.signature}>
           <div className={styles.signatureCompany}>{company.legalName}</div>
           <div>{salesperson.displayName}</div>

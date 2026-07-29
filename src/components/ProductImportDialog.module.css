@@ -1,0 +1,53 @@
+.surface {
+  width: calc(100vw - 32px);
+  max-width: 1180px;
+}
+
+.previewScroll {
+  max-height: 420px;
+  margin-top: 12px;
+  overflow: auto;
+  border: 1px solid var(--line);
+}
+
+.previewTable {
+  min-width: 1060px;
+}
+
+.description,
+.variant {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.45;
+  overflow-wrap: break-word;
+  -webkit-box-orient: vertical;
+}
+
+.description {
+  white-space: pre-line;
+  -webkit-line-clamp: 4;
+}
+
+.variant {
+  -webkit-line-clamp: 2;
+}
+
+@media (max-width: 767px) {
+  .surface {
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+  }
+
+  .previewScroll {
+    max-height: min(52dvh, 520px);
+    overflow-y: auto;
+  }
+
+  .previewTable {
+    min-width: 0;
+  }
+
+  .description {
+    -webkit-line-clamp: 5;
+  }
+}

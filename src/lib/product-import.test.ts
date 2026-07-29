@@ -35,15 +35,23 @@ describe("product import", () => {
     expect(result.records[0].errors).toEqual(["缺少 Description", "缺少 Unit"]);
   });
 
-  it("keeps the first duplicate P/N and marks later rows to skip", async () => {
+  it("allows variants with the same P/N when their descriptions differ", async () => {
     const result = await parseProductImport(await workbook([
       { "P/N": "SJ-102", Description: "First", Unit: "pcs" },
       { "P/N": " sj-102 ", Description: "Second", Unit: "pcs" },
     ]));
     expect(result.records.map((record) => ({ duplicate: record.duplicate, errors: record.errors }))).toEqual([
       { duplicate: false, errors: [] },
-      { duplicate: true, errors: [] },
+      { duplicate: false, errors: [] },
     ]);
+  });
+
+  it("marks the same P/N and normalized description as a duplicate", async () => {
+    const result = await parseProductImport(await workbook([
+      { "P/N": "SJ-103", Description: "UCS2904, DC12V, 0.96W", Unit: "pcs" },
+      { "P/N": "sj-103", Description: "  UCS2904,   DC12V, 0.96W ", Unit: "pcs" },
+    ]));
+    expect(result.records.map((record) => record.duplicate)).toEqual([false, true]);
   });
 
   it("accepts the legacy Item Number header and reads an embedded workbook image", async () => {

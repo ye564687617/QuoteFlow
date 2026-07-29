@@ -1,5 +1,6 @@
 import { PrismaClient, UserRole } from "@prisma/client";
 import { hash } from "bcryptjs";
+import { normalizeDescription, buildVariantLabels } from "../src/lib/product-variants";
 
 const db = new PrismaClient();
 
@@ -64,16 +65,15 @@ async function main() {
     },
   });
 
-  const products = [
-    ["SJ-IC30-2904RGBW-12V-UL", "30mm LED pixel light", "30mm diameter LED pixel light\n- 3 SMD 5050 RGBW LEDs\n- UCS2904, DC12V, 1.8W\n- Clear lens cover housing", "pcs", "Pixel lights"],
-    ["SJ-UFO", "LED WiFi UFO Controller", "LED WiFi UFO Controller, RGBW", "pcs", "Controllers"],
-    ["LRS-600-12", "600W power supply", "Non-waterproof power supply, 600W, DC12V", "pcs", "Power supplies"],
+  const products: Array<[string, string, string, string, number]> = [
+    ["SJ-IC30-2904RGBW-12V-UL", "30mm LED pixel light", "30mm diameter LED pixel light\n- 3 SMD 5050 RGBW LEDs\n- UCS2904, DC12V, 1.8W\n- Clear lens cover housing", "pcs", 0.75],
+    ["SJ-UFO", "LED WiFi UFO Controller", "LED WiFi UFO Controller, RGBW", "pcs", 14],
+    ["LRS-600-12", "600W power supply", "Non-waterproof power supply, 600W, DC12V", "pcs", 43],
   ];
-  for (const [pn, name, description, unit, category] of products) {
-    await db.product.upsert({
-      where: { pnNormalized: pn.trim().toUpperCase() },
-      update: {},
-      create: { pn, pnNormalized: pn.trim().toUpperCase(), name, description, unit, category },
+  const labels = buildVariantLabels(products.map(([, , description], index) => ({ id: String(index), description, descriptionNormalized: normalizeDescription(description) })));
+  for (const [index, [pn, name, description, unit, regularPriceUsd]] of products.entries()) {
+    await db.product.create({
+      data: { pn, pnNormalized: pn.trim().toUpperCase(), name, description, descriptionNormalized: normalizeDescription(description), variantLabel: labels.get(String(index)) ?? "Variant 1", unit, regularPriceUsd },
     });
   }
 

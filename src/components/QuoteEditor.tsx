@@ -51,10 +51,17 @@ function editorFrom(revision: QuoteRevision) {
     deliveryTerms: revision.deliveryTerms ?? "",
     paymentTerms: revision.paymentTerms ?? "",
     productionTime: revision.productionTime ?? "",
-    shippingNote: revision.shippingNote ?? "",
     shippingFee: revision.shippingFee,
     items: revision.items.map((item) => ({ ...item, quantity: String(item.quantity), unitPrice: String(item.unitPrice) })),
   };
+}
+
+function itemLabel(item: Pick<QuoteItem, "pnSnapshot" | "variantLabelSnapshot">) {
+  return `${item.pnSnapshot}${item.variantLabelSnapshot ? `（${item.variantLabelSnapshot}）` : ""}`;
+}
+
+function productLabel(product: Product) {
+  return `${product.pn}${product.variantLabel ? `（${product.variantLabel}）` : ""}`;
 }
 
 export function QuoteEditor({ initialRevision, products, completionMessage }: { initialRevision: QuoteRevision; products: Product[]; completionMessage?: string | null }) {
@@ -78,7 +85,7 @@ export function QuoteEditor({ initialRevision, products, completionMessage }: { 
   const filtered = useMemo(() => {
     const query = search.toLowerCase().trim();
     return query
-      ? products.filter((product) => [product.pn, product.name, product.description].some((value) => value?.toLowerCase().includes(query)))
+      ? products.filter((product) => [product.pn, product.variantLabel, product.name, product.description].some((value) => value?.toLowerCase().includes(query)))
       : products;
   }, [products, search]);
 
@@ -118,7 +125,7 @@ export function QuoteEditor({ initialRevision, products, completionMessage }: { 
               setMessage("");
               showCelebration(completionMessage);
             } else {
-              setMessage("报价图片已经生成，可以下载。");
+              setMessage("报价文件已经生成，可以下载。");
             }
           }
         }
@@ -139,12 +146,13 @@ export function QuoteEditor({ initialRevision, products, completionMessage }: { 
         {
           productId: product.id,
           pnSnapshot: product.pn,
+          variantLabelSnapshot: product.variantLabel,
           nameSnapshot: product.name,
           descriptionSnapshot: product.description,
           unitSnapshot: product.unit,
           imagePathSnapshot: asset?.storagePath ?? null,
           quantity: "1",
-          unitPrice: "0",
+          unitPrice: String(product.regularPriceUsd ?? "0"),
         },
       ],
     }));
@@ -235,8 +243,8 @@ export function QuoteEditor({ initialRevision, products, completionMessage }: { 
     }
   }
 
-  async function deleteDraft() {
-    if (!window.confirm(`确定删除草稿 ${revision.displayPiNumber} 吗？此操作无法撤销。`)) return;
+  async function deleteQuote() {
+    if (!window.confirm(`确定删除报价 ${revision.displayPiNumber} 吗？此操作无法撤销。`)) return;
     setBusy("delete");
     setError("");
     try {
@@ -251,7 +259,7 @@ export function QuoteEditor({ initialRevision, products, completionMessage }: { 
 
   return (
     <>
-      {celebration ? <div key={celebration.key} className="mandy-celebration-toast" data-tone={celebration.tone} role="status" aria-live="polite"><span className="mandy-celebration-icon"><CheckmarkCircle24Regular /></span><span><strong>{celebration.text}</strong><small>报价图片已生成，可以下载啦</small></span></div> : null}
+      {celebration ? <div key={celebration.key} className="mandy-celebration-toast" data-tone={celebration.tone} role="status" aria-live="polite"><span className="mandy-celebration-icon"><CheckmarkCircle24Regular /></span><span><strong>{celebration.text}</strong><small>报价文件已生成，可以下载啦</small></span></div> : null}
       <header className="page-header">
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Button as="a" href="/quotes" appearance="subtle" icon={<ArrowLeft24Regular />} aria-label="返回报价列表" />
@@ -265,17 +273,18 @@ export function QuoteEditor({ initialRevision, products, completionMessage }: { 
             <>
               <span className="status status-final">已锁定</span>
               {revision.exportJob?.status === "READY" ? (
-                <Button as="a" href={`/api/quotes/${revision.id}/download`} appearance="primary" icon={<ArrowDownload24Regular />}>下载 PNG</Button>
+                <><Button as="a" href={`/api/quotes/${revision.id}/download?format=png&bank=0`} appearance="primary" icon={<ArrowDownload24Regular />}>无银行 PNG</Button><Button as="a" href={`/api/quotes/${revision.id}/download?format=pdf&bank=0`} icon={<ArrowDownload24Regular />}>无银行 PDF</Button><Button as="a" href={`/api/quotes/${revision.id}/download?format=png&bank=1`} icon={<ArrowDownload24Regular />}>有银行 PNG</Button><Button as="a" href={`/api/quotes/${revision.id}/download?format=pdf&bank=1`} icon={<ArrowDownload24Regular />}>有银行 PDF</Button></>
               ) : revision.exportJob?.status === "FAILED" ? (
                 <Button icon={<ArrowSync24Regular />} onClick={retryExport} disabled={Boolean(busy)}>重试导出</Button>
               ) : (
                 <Button disabled icon={<ArrowSync24Regular />}>正在生成</Button>
               )}
               <Button icon={<ArrowSync24Regular />} onClick={revise} disabled={busy === "revise"}>创建新一轮</Button>
+              <Button icon={<Delete24Regular />} onClick={deleteQuote} disabled={Boolean(busy)} style={{ color: "var(--danger)" }}>{busy === "delete" ? "删除中" : "删除"}</Button>
             </>
           ) : (
             <>
-              <Button icon={<Delete24Regular />} onClick={deleteDraft} disabled={Boolean(busy)} style={{ color: "var(--danger)" }}>{busy === "delete" ? "删除中" : "删除草稿"}</Button>
+              <Button icon={<Delete24Regular />} onClick={deleteQuote} disabled={Boolean(busy)} style={{ color: "var(--danger)" }}>{busy === "delete" ? "删除中" : "删除草稿"}</Button>
               <Button icon={<Save24Regular />} onClick={() => save()} disabled={Boolean(busy)}>{busy === "save" ? "保存中" : "保存草稿"}</Button>
               <Button appearance="primary" icon={<CheckmarkCircle24Regular />} onClick={finalize} disabled={Boolean(busy) || !form.items.length}>{busy === "finalize" ? "提交中" : "正式导出"}</Button>
             </>
@@ -309,7 +318,7 @@ export function QuoteEditor({ initialRevision, products, completionMessage }: { 
             <dt>Shipping fee</dt><dd>{editable ? <Input className={styles.shippingFeeInput} type="number" min="0" step="0.01" value={form.shippingFee} onChange={(_, data) => setForm({ ...form, shippingFee: data.value })} /> : `$${decimal(form.shippingFee).toFixed(2)}`}</dd>
             <dt className={styles.total}>Total</dt><dd className={styles.total}>${total.toFixed(2)}</dd>
           </dl>
-          <Field label="运输说明"><Textarea disabled={!editable} rows={3} resize="vertical" value={form.shippingNote} onChange={(_, data) => setForm({ ...form, shippingNote: data.value })} /></Field>
+          <div style={{ margin: "10px 0", color: "var(--muted)", fontSize: 13 }}>Shipping: UPS 6-9 working days shipping</div>
           <Field label="生产周期"><Input disabled={!editable} value={form.productionTime} onChange={(_, data) => setForm({ ...form, productionTime: data.value })} /></Field>
         </aside>
       </div>
@@ -327,8 +336,8 @@ export function QuoteEditor({ initialRevision, products, completionMessage }: { 
                 {form.items.map((item, index) => (
                   <tr key={`${item.productId}-${index}`} draggable={editable} onDragStart={(event) => event.dataTransfer.setData("text/plain", String(index))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => move(Number(event.dataTransfer.getData("text/plain")), index)}>
                     <td data-label="序号" className="numeric">{index + 1}</td>
-                    <td data-label="图片">{item.imagePathSnapshot ? <img src={`/api/files/${item.imagePathSnapshot}`} alt={item.pnSnapshot} /> : <span className={styles.noPhoto}>无图</span>}</td>
-                    <td data-label="P/N"><strong>{item.pnSnapshot}</strong></td>
+                    <td data-label="图片">{item.imagePathSnapshot ? <img src={`/api/files/${item.imagePathSnapshot}`} alt={itemLabel(item)} /> : <span className={styles.noPhoto}>无图</span>}</td>
+                    <td data-label="P/N"><strong>{itemLabel(item)}</strong></td>
                     <td data-label="Description">{editable ? <Textarea rows={3} resize="vertical" value={item.descriptionSnapshot} onChange={(_, data) => updateItem(index, { descriptionSnapshot: data.value })} /> : <span style={{ whiteSpace: "pre-line" }}>{item.descriptionSnapshot}</span>}</td>
                     <td data-label="Unit">{item.unitSnapshot}</td>
                     <td data-label="QTY">{editable ? <Input type="number" min="0.001" step="0.001" value={item.quantity} onChange={(_, data) => updateItem(index, { quantity: data.value })} /> : item.quantity}</td>
@@ -357,7 +366,7 @@ export function QuoteEditor({ initialRevision, products, completionMessage }: { 
                   return (
                   <button type="button" key={product.id} disabled={selected} onClick={() => addProduct(product)}>
                     <span className={styles.productImage}>{product.assets[0] ? <img src={`/api/files/${product.assets[0].thumbnailPath}`} alt={product.pn} /> : <Dismiss24Regular />}</span>
-                    <span><strong>{product.pn}</strong><small>{selected ? "已添加到当前报价" : product.name || product.description}</small></span>
+                    <span><strong>{productLabel(product)}</strong><small>{selected ? "已添加到当前报价" : product.name || product.description}</small></span>
                     {selected ? <CheckmarkCircle24Regular /> : <Add24Regular />}
                   </button>
                 )})}

@@ -2,6 +2,7 @@ import path from "node:path";
 import AdmZip from "adm-zip";
 import ExcelJS from "exceljs";
 import { normalizePn } from "@/lib/validation";
+import { normalizeDescription, parseRegularPrice } from "@/lib/product-variants";
 
 export type ImportRecord = {
   rowNumber: number;
@@ -9,7 +10,7 @@ export type ImportRecord = {
   name: string;
   description: string;
   unit: string;
-  category: string;
+  regularPriceUsd: string;
   requestedImage: string;
   imageEntryName: string | null;
   imageBytes: Buffer | null;
@@ -31,6 +32,10 @@ const recognized = new Set([
   "name",
   "productname",
   "category",
+  "regularprice",
+  "unitprice",
+  "unitpriceusd",
+  "priceusd",
   "imagefile",
   "image",
   "photo",
@@ -122,6 +127,7 @@ export async function parseProductImport(workbookBytes: Buffer, zipBytes?: Buffe
     if (!pn) errors.push("缺少 P/N");
     if (!description) errors.push("缺少 Description");
     if (!unit) errors.push("缺少 Unit");
+    if (parseRegularPrice(valueFrom(row, ["regularprice", "unitprice", "unitpriceusd", "priceusd"])) === null) errors.push("常规单价格式不正确");
     if (requestedImage && !selectedImage) errors.push(`找不到图片 ${requestedImage}`);
     const attributes = Object.fromEntries(Object.entries(row)
       .filter(([key, value]) => !recognized.has(normalizedHeader(key)) && value !== "" && value !== null)
@@ -132,7 +138,7 @@ export async function parseProductImport(workbookBytes: Buffer, zipBytes?: Buffe
       name: valueFrom(row, ["name", "productname"]),
       description,
       unit,
-      category: valueFrom(row, ["category"]),
+      regularPriceUsd: valueFrom(row, ["regularprice", "unitprice", "unitpriceusd", "priceusd"]),
       requestedImage,
       imageEntryName: selectedImage?.filename ?? null,
       imageBytes: selectedImage?.bytes ?? null,
@@ -143,12 +149,12 @@ export async function parseProductImport(workbookBytes: Buffer, zipBytes?: Buffe
   }
   if (records.length > 1000) throw new Error("单次最多导入 1000 个产品");
 
-  const seenPns = new Set<string>();
+  const seenIdentities = new Set<string>();
   for (const record of records) {
-    if (!record.pn) continue;
-    const key = normalizePn(record.pn);
-    if (seenPns.has(key)) record.duplicate = true;
-    else seenPns.add(key);
+    if (!record.pn || !record.description) continue;
+    const key = `${normalizePn(record.pn)}:${normalizeDescription(record.description)}`;
+    if (seenIdentities.has(key)) record.duplicate = true;
+    else seenIdentities.add(key);
   }
   return { records, zip };
 }
